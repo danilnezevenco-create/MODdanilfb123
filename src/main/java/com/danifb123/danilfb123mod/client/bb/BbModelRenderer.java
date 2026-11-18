@@ -8,12 +8,30 @@ import com.mojang.math.Axis;
 public final class BbModelRenderer {
     private BbModelRenderer() {}
 
+    /** Вызывается для каждой кости сразу после применения её трансформации (ps.last() = матрица кости). */
+    public interface BoneHook {
+        void onBone(int boneIndex, PoseStack ps);
+    }
+
     public static void render(BbModel model, float[] pose, PoseStack ps, VertexConsumer vc, int light, int overlay) {
-        for (int root : model.roots) renderBone(model, root, pose, ps, vc, light, overlay);
+        render(model, pose, ps, vc, light, overlay, null);
+    }
+
+    /** hiddenBone: имя кости, которую не рисуем вместе со всеми её дочерними (null = рисуем всё). */
+    public static void render(BbModel model, float[] pose, PoseStack ps, VertexConsumer vc, int light, int overlay,
+                              String hiddenBone) {
+        render(model, pose, ps, vc, light, overlay, hiddenBone, null);
+    }
+
+    public static void render(BbModel model, float[] pose, PoseStack ps, VertexConsumer vc, int light, int overlay,
+                              String hiddenBone, BoneHook hook) {
+        int hidden = hiddenBone == null ? -1 : model.boneIndex.getOrDefault(hiddenBone, -1);
+        for (int root : model.roots) renderBone(model, root, pose, ps, vc, light, overlay, hidden, hook);
     }
 
     private static void renderBone(BbModel model, int idx, float[] pose, PoseStack ps,
-                                   VertexConsumer vc, int light, int overlay) {
+                                   VertexConsumer vc, int light, int overlay, int hidden, BoneHook hook) {
+        if (idx == hidden) return;
         BbModel.Bone b = model.bones.get(idx);
         int o = idx * 6;
 
@@ -25,6 +43,7 @@ public final class BbModelRenderer {
         if (ry != 0f) ps.mulPose(Axis.YP.rotationDegrees(ry));
         if (rx != 0f) ps.mulPose(Axis.XP.rotationDegrees(rx));
         ps.translate(-b.ox / 16f, -b.oy / 16f, -b.oz / 16f);
+        if (hook != null) hook.onBone(idx, ps);
 
         PoseStack.Pose last = ps.last();
         for (BbModel.Poly p : b.polys) {
@@ -38,7 +57,7 @@ public final class BbModelRenderer {
                         .setNormal(last, p.nx, p.ny, p.nz);
             }
         }
-        for (int child : b.children) renderBone(model, child, pose, ps, vc, light, overlay);
+        for (int child : b.children) renderBone(model, child, pose, ps, vc, light, overlay, hidden, hook);
         ps.popPose();
     }
 }

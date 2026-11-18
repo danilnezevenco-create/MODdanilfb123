@@ -74,7 +74,7 @@ public final class BbAnimation {
     }
 
     static BbAnimation parse(JsonObject o, BbModel model) {
-        String name = o.has("name") ? o.get("name").getAsString() : "unnamed";
+        String name = o.has("name") ? o.get("name").getAsString().trim() : "unnamed"; // в bbmodel бывает "crouch " с пробелом
         float length = o.has("length") ? o.get("length").getAsFloat() : 0f;
         String loop = o.has("loop") ? o.get("loop").getAsString() : "once";
         BbAnimation anim = new BbAnimation(name, length, "loop".equals(loop));
@@ -113,6 +113,27 @@ public final class BbAnimation {
     private float maxTime;
 
     private float effectiveLength() { return length > 0 ? length : maxTime; }
+
+    /** Длительность анимации в секундах. */
+    public float lengthSeconds() { return effectiveLength(); }
+
+    /**
+     * Время ключа, в котором поворот кости по оси axis (0=X, 1=Y, 2=Z) максимален; -1, если у кости нет дорожки поворота.
+     * Для ног это момент, когда нога вынесена дальше всего вперёд, то есть шаг (касание земли).
+     */
+    public float peakRotationTime(int bone, int axis) {
+        float bestTime = -1f, bestValue = -Float.MAX_VALUE;
+        for (Track tr : tracks) {
+            if (tr.bone != bone || tr.slot != 3) continue;
+            for (int i = 0; i < tr.times.length; i++) {
+                if (tr.values[i][axis] > bestValue + 1e-4f) {
+                    bestValue = tr.values[i][axis];
+                    bestTime = tr.times[i];
+                }
+            }
+        }
+        return bestTime;
+    }
 
     /** Записывает позу в момент time (секунды) в out. Массив предварительно обнуляется. */
     public void sample(float time, float[] out) {

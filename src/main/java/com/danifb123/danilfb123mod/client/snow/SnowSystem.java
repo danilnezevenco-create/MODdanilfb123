@@ -1,6 +1,7 @@
 package com.danifb123.danilfb123mod.client.snow;
 
 import com.danifb123.danilfb123mod.Danilfb123Mod;
+import com.danifb123.danilfb123mod.client.PlayerPoseController;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.minecraft.client.Camera;
@@ -47,8 +48,8 @@ public final class SnowSystem {
     private static final Map<UUID, Foot> FEET = new HashMap<>();
 
     private static final class Foot {
-        double lx, lz, acc;
-        boolean init, wasGround, left;
+        double lx, lz;
+        boolean init, wasGround;
     }
 
     private SnowSystem() {}
@@ -125,25 +126,23 @@ public final class SnowSystem {
         double dx = x - f.lx, dz = z - f.lz;
         f.lx = x; f.lz = z;
         double dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > 4.0) { f.acc = 0; f.wasGround = onSnow; return; } // телепорт
+        if (dist > 4.0) { f.wasGround = onSnow; return; } // телепорт
 
         float yaw = dist > 0.01 ? (float) Math.atan2(-dx, dz) : p.yBodyRot * Mth.DEG_TO_RAD;
 
         if (onSnow && !f.wasGround) { // приземление: оба следа, глубже и шире
             stampPair(x, z, yaw, 0.92f, 1.25f);
         }
-        if (onSnow && dist > 0.005) {
-            f.acc += dist;
+        // Шаги берём из анимации: контроллер сообщает, какая нога коснулась земли в этот тик (первой всегда левая).
+        int foot = PlayerPoseController.pollStep(p.getUUID());
+        if (onSnow && foot >= 0) {
             boolean sprint = p.isSprinting();
             boolean sneak = p.isCrouching();
-            double stride = sprint ? 0.95 : sneak ? 0.45 : 0.72;
             float pressure = sprint ? 0.92f : sneak ? 0.6f : 0.82f;
-            if (f.acc >= stride) {
-                f.acc -= stride;
-                f.left = !f.left;
-                float side = f.left ? -1f : 1f;
-                field.stampFoot(x + Mth.cos(yaw) * 0.11 * side, z + Mth.sin(yaw) * 0.11 * side, yaw, pressure, 1f);
-            }
+            double reach = sprint ? 0.27 : sneak ? 0.13 : 0.2; // нога в момент касания вынесена вперёд
+            float side = foot == PlayerPoseController.LEFT ? 1f : -1f; // +1 = левая нога (слева от направления движения)
+            field.stampFoot(x + Mth.cos(yaw) * 0.11 * side - Mth.sin(yaw) * reach,
+                    z + Mth.sin(yaw) * 0.11 * side + Mth.cos(yaw) * reach, yaw, pressure, 1f);
         }
         f.wasGround = onSnow;
     }
